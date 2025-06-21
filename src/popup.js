@@ -46,7 +46,7 @@ class PopupManager {
         this.showStatus('Token loaded', 'success');
       }
     } catch (error) {
-      console.error('Failed to load token:', error);
+      // Failed to load token
     }
   }
 
@@ -88,7 +88,7 @@ class PopupManager {
       }
     } catch (error) {
       this.showStatus('Error saving token', 'error');
-      console.error('Save token error:', error);
+      // Save token error
     }
   }
 
@@ -111,7 +111,7 @@ class PopupManager {
       }
     } catch (error) {
       this.showStatus('Error: Not on a GitHub page', 'error');
-      console.error('Toggle sidebar error:', error);
+      // Toggle sidebar error
     }
   }
 
@@ -130,7 +130,7 @@ class PopupManager {
       this.showStatus('Sidebar refreshed', 'success');
     } catch (error) {
       this.showStatus('Error: Not on a GitHub page', 'error');
-      console.error('Refresh sidebar error:', error);
+      // Refresh sidebar error
     }
   }
 
@@ -139,7 +139,7 @@ class PopupManager {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       this.currentTab = tab;
     } catch (error) {
-      console.error('Failed to get current tab:', error);
+      // Failed to get current tab
     }
   }
 
@@ -179,7 +179,7 @@ class PopupManager {
     } catch (error) {
       repoDiv.textContent = 'Extension not loaded on this page';
       repoDiv.className = 'status error';
-      console.error('Get current repo error:', error);
+      // Get current repo error
     }
   }
 
