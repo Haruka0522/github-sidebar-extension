@@ -103,6 +103,7 @@ class GitHubSidebarContent {
     this.layoutObserver = new MutationObserver((mutations) => {
       let shouldUpdate = false;
       let hasBodyClassChange = false;
+      let hasThemeChange = false;
       
       mutations.forEach((mutation) => {
         // body要素のクラス変更を検知
@@ -110,6 +111,13 @@ class GitHubSidebarContent {
             mutation.target === document.body && 
             mutation.attributeName === 'class') {
           hasBodyClassChange = true;
+        }
+        
+        // html要素のdata-color-mode/data-color-theme変更を検知
+        if (mutation.type === 'attributes' && 
+            mutation.target === document.documentElement && 
+            (mutation.attributeName === 'data-color-mode' || mutation.attributeName === 'data-color-theme')) {
+          hasThemeChange = true;
         }
         
         if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
@@ -129,10 +137,13 @@ class GitHubSidebarContent {
         }
       });
       
-      if ((shouldUpdate || hasBodyClassChange) && this.isVisible) {
+      if ((shouldUpdate || hasBodyClassChange || hasThemeChange) && this.isVisible) {
         // デバウンスして更新
         clearTimeout(this.layoutUpdateTimeout);
         this.layoutUpdateTimeout = setTimeout(() => {
+          if (hasThemeChange) {
+            this.updateSidebarTheme();
+          }
           this.ensureSidebarLayout();
         }, 50); // より高速な反応
       }
@@ -144,6 +155,12 @@ class GitHubSidebarContent {
       subtree: true,
       attributes: true,
       attributeFilter: ['class']
+    });
+    
+    // html要素のテーマ属性変更を監視
+    this.layoutObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-color-mode', 'data-color-theme']
     });
     
     const main = document.querySelector('main');
@@ -858,6 +875,9 @@ class GitHubSidebarContent {
     // GitHubページのレイアウトを分割モードに変更
     document.body.classList.add('github-sidebar-split-layout', 'github-sidebar-active');
     
+    // ダークテーマ検知とサイドバーテーマ同期
+    this.updateSidebarTheme();
+    
     this.updateSidebarStyles();
     this.updatePageLayout();
     
@@ -893,6 +913,57 @@ class GitHubSidebarContent {
     } else {
       this.showSidebar();
     }
+  }
+
+  updateSidebarTheme() {
+    if (!this.sidebar) return;
+    
+    // GitHubページのダークテーマを検知
+    const isDarkTheme = this.detectGitHubDarkTheme();
+    
+    // サイドバーにテーマクラスを適用
+    if (isDarkTheme) {
+      this.sidebar.classList.add('github-sidebar-dark-theme');
+      this.sidebar.classList.remove('github-sidebar-light-theme');
+    } else {
+      this.sidebar.classList.add('github-sidebar-light-theme');
+      this.sidebar.classList.remove('github-sidebar-dark-theme');
+    }
+  }
+
+  detectGitHubDarkTheme() {
+    // 複数の方法でGitHubのダークテーマを検知
+    
+    // 1. GitHubのhtml要素のdata-color-mode属性を確認
+    const htmlElement = document.documentElement;
+    const colorMode = htmlElement.getAttribute('data-color-mode');
+    const colorTheme = htmlElement.getAttribute('data-color-theme');
+    
+    if (colorMode === 'dark' || colorTheme === 'dark') {
+      return true;
+    }
+    
+    // 2. GitHubのbody要素のクラスを確認
+    const body = document.body;
+    if (body.classList.contains('dark') || body.classList.contains('github-dark')) {
+      return true;
+    }
+    
+    // 3. システムのprefers-color-schemeを確認
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return true;
+    }
+    
+    // 4. GitHubのCSS変数を確認（計算されたスタイル）
+    const computedStyle = window.getComputedStyle(document.body);
+    const bgColor = computedStyle.backgroundColor;
+    
+    // 背景色が暗い場合はダークテーマと判定
+    if (bgColor && (bgColor.includes('rgb(13, 17, 23)') || bgColor.includes('#0d1117'))) {
+      return true;
+    }
+    
+    return false;
   }
 
   async loadPageInSidebar(linkInfo) {
