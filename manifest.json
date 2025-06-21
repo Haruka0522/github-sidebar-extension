@@ -7,8 +7,7 @@
   "permissions": [
     "storage",
     "activeTab",
-    "webRequest",
-    "webRequestBlocking"
+    "declarativeNetRequest"
   ],
   
   "host_permissions": [
@@ -38,5 +37,15 @@
       "resources": ["src/*"],
       "matches": ["https://github.com/*"]
     }
-  ]
+  ],
+  
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "github_iframe_rules",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
+  }
 }

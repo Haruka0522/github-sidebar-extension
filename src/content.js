@@ -11,6 +11,13 @@ class GitHubSidebarContent {
     this.minWidth = 300; // 最小幅
     this.maxWidth = 800; // 最大幅
     this.isResizing = false;
+    this.lastResizeTime = 0;
+    this.resizeAnimationFrame = null;
+    
+    // iframeスタイル更新の最適化されたデバウンス関数
+    this.debouncedUpdateIframeStyles = this.debounce(() => {
+      this.updateIframeStyles();
+    }, 50); // 遅延を短く
     
     this.init();
   }
@@ -25,6 +32,7 @@ class GitHubSidebarContent {
     await this.loadSidebarWidth();
 
     this.setupMessageListener();
+    this.setupIframeMessageListener();
     this.detectRepository();
     this.setupNavigationListener();
     this.setupLinkInterception();
@@ -87,6 +95,21 @@ class GitHubSidebarContent {
     });
   }
 
+  setupIframeMessageListener() {
+    // iframe内からのメッセージを受信
+    window.addEventListener('message', (event) => {
+      if (event.origin !== 'https://github.com') return;
+      
+      if (event.data.type === 'NAVIGATE_SIDEBAR') {
+        const linkInfo = event.data.linkInfo;
+        if (linkInfo) {
+          console.log('Navigating sidebar to:', linkInfo);
+          this.loadPageInSidebar(linkInfo);
+        }
+      }
+    });
+  }
+
   setupNavigationListener() {
     // GitHub SPAのナビゲーション監視
     let lastUrl = location.href;
@@ -114,7 +137,16 @@ class GitHubSidebarContent {
 
   attachLinkListeners() {
     // Issue/PRへのリンクを検出してイベントリスナーを追加
-    const links = document.querySelectorAll('a[href*="/issues/"], a[href*="/pull/"]');
+    const linkSelectors = [
+      'a[href*="/issues/"]',
+      'a[href*="/pull/"]',
+      'a[data-hovercard-type="issue"]',
+      'a[data-hovercard-type="pull_request"]',
+      '.js-issue-row a',
+      '.js-navigation-item a'
+    ];
+    
+    const links = document.querySelectorAll(linkSelectors.join(', '));
     
     links.forEach(link => {
       // 既にリスナーが追加されている場合はスキップ
@@ -122,10 +154,13 @@ class GitHubSidebarContent {
         return;
       }
       
-      link.setAttribute('data-gh-sidebar-processed', 'true');
-      link.addEventListener('click', (event) => {
-        this.handleLinkClick(event);
-      });
+      const href = link.getAttribute('href');
+      if (this.isIssueOrPRLink(href)) {
+        link.setAttribute('data-gh-sidebar-processed', 'true');
+        link.addEventListener('click', (event) => {
+          this.handleLinkClick(event);
+        });
+      }
     });
   }
 
@@ -151,11 +186,11 @@ class GitHubSidebarContent {
 
   isIssueOrPRLink(href) {
     if (!href) return false;
-    return href.includes('/issues/') || href.includes('/pull/');
+    return href.includes('/issues/') || href.includes('/pull/') || href.match(/\/pull\/\d+/);
   }
 
   parseLinkInfo(href) {
-    // 相対パスと絶対パスの両方に対応
+    // 相対パスと絶対パスの両方に対応、PRのpullパスも対応
     const match = href.match(/(?:https?:\/\/github\.com)?\/([^\/]+)\/([^\/]+)\/(issues|pull)\/(\d+)/);
     if (match) {
       return {
@@ -165,6 +200,19 @@ class GitHubSidebarContent {
         number: parseInt(match[4])
       };
     }
+    
+    // GitHub URLのクエリパラメータやアンカーを含む場合の処理
+    const cleanHref = href.split('?')[0].split('#')[0];
+    const matchClean = cleanHref.match(/(?:https?:\/\/github\.com)?\/([^\/]+)\/([^\/]+)\/(issues|pull)\/(\d+)/);
+    if (matchClean) {
+      return {
+        owner: matchClean[1],
+        repo: matchClean[2],
+        type: matchClean[3] === 'issues' ? 'issue' : 'pr',
+        number: parseInt(matchClean[4])
+      };
+    }
+    
     return null;
   }
 
@@ -257,15 +305,28 @@ class GitHubSidebarContent {
     resizeHandle.className = 'gh-sidebar-resize-handle';
     resizeHandle.style.cssText = `
       position: absolute;
-      left: 0;
+      left: -3px;
       top: 0;
-      width: 5px;
+      width: 8px;
       height: 100%;
       background: transparent;
       cursor: ew-resize;
       z-index: 10001;
       user-select: none;
+      border-left: 2px solid transparent;
+      transition: border-color 0.2s ease;
     `;
+    
+    // ホバー効果
+    resizeHandle.addEventListener('mouseenter', () => {
+      resizeHandle.style.borderLeftColor = 'rgba(9, 105, 218, 0.5)';
+    });
+    
+    resizeHandle.addEventListener('mouseleave', () => {
+      if (!this.isResizing) {
+        resizeHandle.style.borderLeftColor = 'transparent';
+      }
+    });
     
     // マウスイベントを設定
     resizeHandle.addEventListener('mousedown', this.startResize.bind(this));
@@ -277,30 +338,51 @@ class GitHubSidebarContent {
     this.isResizing = true;
     this.startX = event.clientX;
     this.startWidth = this.sidebarWidth;
+    this.lastResizeTime = 0;
+    
+    // リサイズ中のビジュアルフィードバック
+    const resizeHandle = event.target;
+    resizeHandle.style.borderLeftColor = 'rgba(9, 105, 218, 0.8)';
+    document.body.style.cursor = 'ew-resize';
     
     // ドキュメント全体にマウスイベントを追加
     document.addEventListener('mousemove', this.handleResize.bind(this));
     document.addEventListener('mouseup', this.stopResize.bind(this));
     
-    // テキスト選択を無効化
+    // テキスト選択とコンテキストメニューを無効化
     document.body.style.userSelect = 'none';
+    document.body.style.pointerEvents = 'none';
+    this.sidebar.style.pointerEvents = 'auto';
     
     event.preventDefault();
+    event.stopPropagation();
   }
 
   handleResize(event) {
     if (!this.isResizing) return;
     
+    const now = Date.now();
+    if (now - this.lastResizeTime < 16) return; // 60fps制限
+    this.lastResizeTime = now;
+    
     const deltaX = this.startX - event.clientX;
     const newWidth = Math.max(this.minWidth, Math.min(this.maxWidth, this.startWidth + deltaX));
     
-    if (newWidth !== this.sidebarWidth) {
+    if (Math.abs(newWidth - this.sidebarWidth) > 2) { // 2px以上の変化のみ処理
       this.sidebarWidth = newWidth;
-      this.updateSidebarStyles();
-      this.updatePageLayout();
       
-      // 幅をローカルストレージに保存
-      this.saveSidebarWidth();
+      // UI更新をrequestAnimationFrameで最適化
+      if (this.resizeAnimationFrame) {
+        cancelAnimationFrame(this.resizeAnimationFrame);
+      }
+      
+      this.resizeAnimationFrame = requestAnimationFrame(() => {
+        this.updateSidebarStyles();
+        this.updatePageLayout();
+        
+        // iframeスタイル更新はデバウンスで最適化
+        this.debouncedUpdateIframeStyles();
+      });
     }
   }
 
@@ -311,8 +393,29 @@ class GitHubSidebarContent {
     document.removeEventListener('mousemove', this.handleResize);
     document.removeEventListener('mouseup', this.stopResize);
     
-    // テキスト選択を再有効化
+    // UI状態を復元
     document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+    document.body.style.pointerEvents = '';
+    this.sidebar.style.pointerEvents = '';
+    
+    // リサイズハンドルの色を復元
+    const resizeHandle = this.sidebar.querySelector('.gh-sidebar-resize-handle');
+    if (resizeHandle) {
+      resizeHandle.style.borderLeftColor = 'transparent';
+    }
+    
+    // アニメーションフレームをキャンセル
+    if (this.resizeAnimationFrame) {
+      cancelAnimationFrame(this.resizeAnimationFrame);
+      this.resizeAnimationFrame = null;
+    }
+    
+    // 最終的なスタイル適用と保存
+    setTimeout(() => {
+      this.updateIframeStyles();
+      this.saveSidebarWidth();
+    }, 50);
   }
 
   updateSidebarStyles() {
@@ -357,6 +460,18 @@ class GitHubSidebarContent {
         }
       `;
     }
+  }
+
+  debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+      const later = () => {
+        clearTimeout(timeout);
+        func.apply(this, args);
+      };
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+    }.bind(this);
   }
 
   async saveSidebarWidth() {
@@ -476,6 +591,11 @@ class GitHubSidebarContent {
     
     this.updateSidebarStyles();
     this.updatePageLayout();
+    
+    // iframe内のスタイルも更新
+    setTimeout(() => {
+      this.updateIframeStyles();
+    }, 200);
   }
 
   hideSidebar() {
@@ -505,19 +625,459 @@ class GitHubSidebarContent {
     this.currentPageUrl = pageUrl;
     
     try {
-      // 実際のGitHubページをフェッチして表示
-      await this.fetchAndDisplayGithubPage(pageUrl);
+      // iframeでGitHubページを読み込み
+      await this.loadPageInIframe(pageUrl);
       this.hideLoading();
       
     } catch (error) {
-      console.log('GitHub page fetch failed:', error);
-      this.hideLoading();
-      this.showError('GitHubページの読み込みに失敗しました');
+      console.log('iframe load failed, falling back to static content:', error);
+      try {
+        // フォールバック: 静的コンテンツ表示
+        await this.fetchAndDisplayGithubPage(pageUrl);
+        this.hideLoading();
+        this.enhanceStaticContent(linkInfo);
+      } catch (fallbackError) {
+        this.hideLoading();
+        this.showError('GitHubページの読み込みに失敗しました');
+      }
     }
   }
 
+
+  async loadPageInIframe(pageUrl) {
+    // iframeでGitHubページを読み込み
+    const contentArea = this.sidebar.querySelector('#gh-sidebar-content');
+    if (!contentArea) return;
+
+    // 既存のコンテンツをクリア
+    const existingContent = contentArea.querySelector('#gh-sidebar-page-content');
+    if (existingContent) {
+      contentArea.removeChild(existingContent);
+    }
+
+    // iframeコンテナを作成
+    const iframeContainer = document.createElement('div');
+    iframeContainer.id = 'gh-sidebar-page-content';
+    iframeContainer.className = 'github-page-content';
+    
+    // iframeを作成
+    const iframe = document.createElement('iframe');
+    iframe.className = 'sidebar-iframe';
+    iframe.style.cssText = `
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #ffffff;
+      display: block;
+      margin: 0;
+      padding: 0;
+    `;
+    
+    // iframeのURLを設定
+    iframe.src = pageUrl;
+    
+    // iframe読み込みイベントを監視
+    return new Promise((resolve, reject) => {
+      iframe.addEventListener('load', () => {
+        console.log('GitHub page loaded successfully in iframe');
+        this.setupIframeInteraction(iframe);
+        // 読み込み後にスタイルを再適用
+        setTimeout(() => {
+          this.updateIframeStyles();
+        }, 500);
+        resolve();
+      });
+      
+      iframe.addEventListener('error', () => {
+        console.log('iframe failed to load');
+        reject(new Error('iframe loading failed'));
+      });
+      
+      // タイムアウトでエラーとする
+      setTimeout(() => {
+        reject(new Error('iframe loading timeout'));
+      }, 10000);
+      
+      iframeContainer.appendChild(iframe);
+      contentArea.appendChild(iframeContainer);
+    });
+  }
+
+  setupIframeInteraction(iframe) {
+    try {
+      // iframe内のGitHubページとの相互作用を設定
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+      
+      // DOM読み込み完了を待ってからスタイル調整
+      if (iframeDoc.readyState === 'loading') {
+        iframeDoc.addEventListener('DOMContentLoaded', () => {
+          this.adjustIframeStyles(iframeDoc);
+          this.setupIframeLinkHandling(iframeDoc);
+        });
+      } else {
+        // 既に読み込み完了している場合
+        setTimeout(() => {
+          this.adjustIframeStyles(iframeDoc);
+          this.setupIframeLinkHandling(iframeDoc);
+        }, 100);
+      }
+      
+      // サイドバーの幅変更を監視してiframeスタイルを更新
+      const observer = new MutationObserver(() => {
+        this.adjustIframeStyles(iframeDoc);
+      });
+      
+      // サイドバーのスタイル変更を監視
+      if (this.sidebar) {
+        observer.observe(this.sidebar, {
+          attributes: true,
+          attributeFilter: ['style']
+        });
+      }
+      
+      // 追加のスタイル調整を定期的に実行（GitHub SPAの動的読み込み対応）
+      const styleInterval = setInterval(() => {
+        try {
+          const doc = iframe.contentDocument || iframe.contentWindow.document;
+          if (doc && doc.body) {
+            this.adjustIframeStyles(doc);
+          }
+        } catch (e) {
+          clearInterval(styleInterval);
+        }
+      }, 1000);
+      
+      // 10秒後にインターバルを停止
+      setTimeout(() => {
+        clearInterval(styleInterval);
+      }, 10000);
+      
+      console.log('iframe interaction setup completed');
+      
+    } catch (error) {
+      console.log('Cannot access iframe content due to CORS:', error);
+      // CORS制限によりアクセスできない場合は何もしない
+    }
+  }
+
+  updateIframeStyles() {
+    // 現在表示中のiframeのスタイルを更新
+    const iframe = this.sidebar?.querySelector('.sidebar-iframe');
+    if (!iframe) return;
+    
+    // iframe自体のサイズを更新（スムーズなアニメーション）
+    iframe.style.transition = 'width 0.1s ease-out';
+    iframe.style.width = this.sidebarWidth + 'px';
+    iframe.style.maxWidth = this.sidebarWidth + 'px';
+    iframe.style.minWidth = this.sidebarWidth + 'px';
+    
+    try {
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+      if (iframeDoc && iframeDoc.readyState === 'complete') {
+        // パフォーマンスを最適化したスタイル適用
+        this.optimizedAdjustIframeStyles(iframeDoc);
+      }
+    } catch (error) {
+      // CORS制限の場合は無視
+    }
+  }
+
+  optimizedAdjustIframeStyles(iframeDoc) {
+    // パフォーマンス最適化されたスタイル適用
+    const styleId = 'github-sidebar-custom-styles';
+    let style = iframeDoc.querySelector(`#${styleId}`);
+    
+    if (!style) {
+      style = iframeDoc.createElement('style');
+      style.id = styleId;
+      iframeDoc.head.appendChild(style);
+    }
+    
+    // サイドバー幅に基づいた最適化されたスタイル
+    const containerWidth = this.sidebarWidth - 16;
+    const contentWidth = this.sidebarWidth - 20;
+    
+    style.textContent = `
+      /* ヘッダー、フッター、ナビゲーションを非表示 */
+      .Header, .footer, .js-header-wrapper { display: none !important; }
+      .subnav, .pagehead, .BorderGrid-row .BorderGrid-cell:first-child { display: none !important; }
+      .js-notification-shelf, .js-flash-container { display: none !important; }
+      
+      /* ボディとメインコンテナの幅調整 */
+      html, body {
+        width: ${this.sidebarWidth}px !important;
+        max-width: ${this.sidebarWidth}px !important;
+        min-width: ${this.sidebarWidth}px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow-x: hidden !important;
+        background: #ffffff !important;
+        box-sizing: border-box !important;
+      }
+      
+      /* メインコンテナの幅調整 */
+      .container-xl, .container-lg, .container-md, .container {
+        max-width: ${containerWidth}px !important;
+        width: ${containerWidth}px !important;
+        min-width: ${containerWidth}px !important;
+        padding: 8px !important;
+        margin: 0 auto !important;
+        box-sizing: border-box !important;
+      }
+      
+      /* レイアウト調整 */
+      .Layout, .Layout-main, .Layout-content {
+        width: ${this.sidebarWidth}px !important;
+        max-width: ${this.sidebarWidth}px !important;
+        min-width: ${this.sidebarWidth}px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-sizing: border-box !important;
+      }
+      
+      /* サイドバー要素を非表示 */
+      .Layout-sidebar, .sidebar-component {
+        display: none !important;
+      }
+      
+      /* グリッドレイアウト調整 */
+      .gutter-condensed, .gutter-spacious {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+      }
+      
+      /* フォントサイズ調整 */
+      body { font-size: 13px !important; line-height: 1.4 !important; }
+      
+      /* タイムライン調整 */
+      .timeline-comment { margin-bottom: 8px !important; }
+      .timeline-comment-header { padding: 6px 8px !important; font-size: 11px !important; }
+      .comment-body { padding: 8px !important; font-size: 12px !important; }
+      
+      /* マークダウン調整 */
+      .markdown-body {
+        font-size: 12px !important;
+        line-height: 1.4 !important;
+      }
+      
+      .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+        font-size: 14px !important;
+        margin: 8px 0 4px 0 !important;
+      }
+      
+      .markdown-body p {
+        margin: 6px 0 !important;
+      }
+      
+      .markdown-body pre {
+        font-size: 10px !important;
+        padding: 6px !important;
+        overflow-x: auto !important;
+      }
+      
+      /* ボタン、フォーム調整 */
+      .btn { font-size: 11px !important; padding: 4px 8px !important; }
+      
+      /* テーブル調整 */
+      table { font-size: 11px !important; }
+      
+      /* 幅が固定された要素の調整 */
+      [style*="width:"] {
+        width: auto !important;
+        max-width: ${containerWidth}px !important;
+      }
+      
+      .width-full {
+        width: ${containerWidth}px !important;
+        max-width: ${containerWidth}px !important;
+      }
+      
+      /* コンテンツの最大幅制限 */
+      * {
+        max-width: ${this.sidebarWidth}px !important;
+        box-sizing: border-box !important;
+      }
+      
+      /* スクロール可能要素の調整 */
+      .overflow-auto, .overflow-x-auto {
+        max-width: ${contentWidth}px !important;
+      }
+      
+      /* 強制的な幅制限 */
+      #js-repo-pjax-container,
+      .application-main,
+      [data-turbo-body] {
+        width: ${this.sidebarWidth}px !important;
+        max-width: ${this.sidebarWidth}px !important;
+        overflow-x: hidden !important;
+      }
+      
+      /* フレックスレイアウト調整 */
+      .d-flex {
+        flex-wrap: wrap !important;
+      }
+      
+      /* PR固有の要素調整 */
+      .pr-toolbar, .pull-request-tab-content {
+        width: ${containerWidth}px !important;
+        max-width: ${containerWidth}px !important;
+        margin: 0 !important;
+        padding: 6px !important;
+        box-sizing: border-box !important;
+      }
+      
+      .diffbar {
+        font-size: 10px !important;
+        padding: 4px 6px !important;
+      }
+      
+      .file-header {
+        font-size: 10px !important;
+        padding: 4px 6px !important;
+      }
+      
+      .diff-table {
+        font-size: 10px !important;
+        line-height: 1.2 !important;
+        overflow-x: auto !important;
+        max-width: ${contentWidth}px !important;
+        width: ${contentWidth}px !important;
+      }
+      
+      .blob-code {
+        font-size: 9px !important;
+        padding: 0 4px !important;
+        line-height: 1.2 !important;
+        white-space: pre-wrap !important;
+        word-break: break-all !important;
+      }
+      
+      .blob-code-inner {
+        max-width: 100% !important;
+        overflow-wrap: break-word !important;
+        word-break: break-all !important;
+      }
+      
+      /* スクロールバー調整 */
+      ::-webkit-scrollbar {
+        width: 6px !important;
+        height: 6px !important;
+      }
+      
+      ::-webkit-scrollbar-track {
+        background: #f1f1f1 !important;
+      }
+      
+      ::-webkit-scrollbar-thumb {
+        background: #c1c1c1 !important;
+        border-radius: 3px !important;
+      }
+      
+      ::-webkit-scrollbar-thumb:hover {
+        background: #a8a8a8 !important;
+      }
+    `;
+    
+    // 重要な要素のみ直接スタイル適用（パフォーマンス最適化）
+    this.quickResizeElements(iframeDoc);
+  }
+  
+  quickResizeElements(iframeDoc) {
+    // 最も重要な要素のみ素早くリサイズ
+    const criticalSelectors = ['html', 'body', '.container-xl', '.container-lg'];
+    
+    criticalSelectors.forEach(selector => {
+      const elements = iframeDoc.querySelectorAll(selector);
+      elements.forEach(el => {
+        el.style.setProperty('width', this.sidebarWidth + 'px', 'important');
+        el.style.setProperty('max-width', this.sidebarWidth + 'px', 'important');
+        el.style.setProperty('overflow-x', 'hidden', 'important');
+      });
+    });
+  }
+  
+  // 既存のadjustIframeStylesメソッドを保持（互換性のため）
+  adjustIframeStyles(iframeDoc) {
+    this.optimizedAdjustIframeStyles(iframeDoc);
+  }
+  
+  forceIframeResize(iframeDoc) {
+    // 強制的にサイズを再設定
+    const elementsToResize = [
+      'html', 'body', '.container-xl', '.container-lg', '.container-md', '.container',
+      '.Layout', '.Layout-main', '.Layout-content', '#js-repo-pjax-container',
+      '.application-main', '[data-turbo-body]'
+    ];
+    
+    elementsToResize.forEach(selector => {
+      const elements = iframeDoc.querySelectorAll(selector);
+      elements.forEach(el => {
+        el.style.setProperty('width', this.sidebarWidth + 'px', 'important');
+        el.style.setProperty('max-width', this.sidebarWidth + 'px', 'important');
+        el.style.setProperty('min-width', this.sidebarWidth + 'px', 'important');
+        el.style.setProperty('overflow-x', 'hidden', 'important');
+        el.style.setProperty('box-sizing', 'border-box', 'important');
+      });
+    });
+    
+    // 特定の幅制限を持つ要素を強制的に調整
+    const wideElements = iframeDoc.querySelectorAll('[style*="width"]');
+    wideElements.forEach(el => {
+      const currentWidth = parseInt(el.style.width);
+      if (currentWidth > this.sidebarWidth) {
+        el.style.setProperty('width', 'auto', 'important');
+        el.style.setProperty('max-width', this.sidebarWidth + 'px', 'important');
+      }
+    });
+    
+    // ビューポートの設定
+    let viewport = iframeDoc.querySelector('meta[name="viewport"]');
+    if (viewport) {
+      viewport.setAttribute('content', `width=${this.sidebarWidth}, initial-scale=1.0`);
+    } else {
+      viewport = iframeDoc.createElement('meta');
+      viewport.name = 'viewport';
+      viewport.content = `width=${this.sidebarWidth}, initial-scale=1.0`;
+      iframeDoc.head.appendChild(viewport);
+    }
+    
+    console.log('Forced iframe resize completed for width:', this.sidebarWidth);
+  }
+
+  setupIframeLinkHandling(iframeDoc) {
+    // iframe内のリンククリックを処理
+    iframeDoc.addEventListener('click', (event) => {
+      const link = event.target.closest('a');
+      if (!link) return;
+      
+      const href = link.getAttribute('href');
+      if (!href) return;
+      
+      // GitHub内のIssue/PRリンクの場合はサイドバー内で開く
+      if (this.isIssueOrPRLink(href)) {
+        event.preventDefault();
+        const linkInfo = this.parseLinkInfo(href);
+        if (linkInfo) {
+          // 親ウィンドウにメッセージを送信
+          window.parent.postMessage({
+            type: 'NAVIGATE_SIDEBAR',
+            linkInfo: linkInfo
+          }, '*');
+        }
+      } else if (link.target === '_blank' || event.ctrlKey || event.metaKey) {
+        // 新しいタブで開くリンクはそのまま處理
+        return;
+      } else if (href.startsWith('https://github.com') || href.startsWith('/')) {
+        // その他のGitHubリンクは新しいタブで開く
+        event.preventDefault();
+        const fullUrl = href.startsWith('/') ? `https://github.com${href}` : href;
+        window.open(fullUrl, '_blank');
+      }
+    });
+  }
+
   async fetchAndDisplayGithubPage(pageUrl) {
-    // Background Scriptに実際のページ取得を依頼
+    // フォールバック: 静的コンテンツ表示（既存の実装）
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(
         { action: 'FETCH_GITHUB_PAGE', payload: { url: pageUrl } },
@@ -555,43 +1115,131 @@ class GitHubSidebarContent {
     
     // GitHubページ内のリンクを処理
     this.processPageLinks(pageContainer);
+    
+    return pageContainer;
   }
 
   sanitizeAndAdaptGithubContent(htmlContent, baseUrl) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmlContent, 'text/html');
     
-    // メインコンテンツ部分を抽出（GitHub特有のセレクタを使用）
-    const mainContent = doc.querySelector('main, [role="main"], .js-repo-pjax-container');
+    // Issue/PR固有のコンテンツ部分を抽出
+    let mainContent = this.findIssueOrPRContent(doc);
+    
+    if (!mainContent) {
+      // フォールバック: より一般的なセレクタを試行
+      mainContent = doc.querySelector('main, [role="main"], .js-repo-pjax-container, #js-repo-pjax-container');
+    }
+    
     if (!mainContent) {
       throw new Error('GitHubのメインコンテンツが見つかりませんでした');
     }
     
     // 不要な要素を削除
-    const elementsToRemove = [
-      '.Header', '.footer', '.js-header-wrapper',
-      '.subnav', '.pagehead', '.file-navigation',
-      '.js-notification-shelf', '.js-flash-container'
-    ];
-    
-    elementsToRemove.forEach(selector => {
-      const elements = mainContent.querySelectorAll(selector);
-      elements.forEach(el => el.remove());
-    });
+    this.removeUnwantedElements(mainContent);
     
     // サイドバー表示に適したスタイルを追加
-    mainContent.style.cssText = `
-      width: 100% !important;
-      max-width: none !important;
-      padding: 16px !important;
-      margin: 0 !important;
-      font-size: 13px !important;
-    `;
+    this.applySidebarStyles(mainContent);
     
     // 相対URLを絶対URLに変換
     this.convertRelativeUrls(mainContent, baseUrl);
     
     return mainContent.outerHTML;
+  }
+
+  findIssueOrPRContent(doc) {
+    // Issue/PR専用のセレクタを順番に試行
+    const selectors = [
+      // Issue/PRの詳細ページ
+      '.js-issues-results, .js-issues-container',
+      '.repository-content',
+      '.container-xl .gutter-condensed',
+      '.container-lg .gutter-condensed',
+      // PR固有
+      '.pull-request-tab-content',
+      '.js-pull-request-tab',
+      '.pr-toolbar',
+      // Issue固有
+      '.js-issue-title',
+      '.js-issue-row',
+      // 一般的な
+      '.js-repo-pjax-container',
+      'main[role="main"]',
+      'main',
+      '#js-repo-pjax-container'
+    ];
+    
+    for (const selector of selectors) {
+      const element = doc.querySelector(selector);
+      if (element) {
+        console.log(`Found content with selector: ${selector}`);
+        return element;
+      }
+    }
+    
+    return null;
+  }
+
+  removeUnwantedElements(mainContent) {
+    const elementsToRemove = [
+      // ヘッダー・ナビゲーション
+      '.Header', '.footer', '.js-header-wrapper',
+      '.subnav', '.pagehead', '.file-navigation',
+      '.js-notification-shelf', '.js-flash-container',
+      // サイドバー要素
+      '.Layout-sidebar', '.sidebar-component',
+      // 広告・プロモーション
+      '.js-notice', '.flash-notice', '.flash-error',
+      // ナビゲーションバー
+      '.js-sticky', '.sticky',
+      // ファイルビューア関連
+      '.file-header', '.file-actions',
+      // その他不要な要素
+      '.js-site-search-form', '.js-global-search-form'
+    ];
+    
+    elementsToRemove.forEach(selector => {
+      const elements = mainContent.querySelectorAll(selector);
+      elements.forEach(el => {
+        console.log(`Removing element: ${selector}`);
+        el.remove();
+      });
+    });
+  }
+
+  applySidebarStyles(mainContent) {
+    // コンテナ全体のスタイル
+    mainContent.style.cssText = `
+      width: 100% !important;
+      max-width: none !important;
+      padding: 12px !important;
+      margin: 0 !important;
+      font-size: 13px !important;
+      line-height: 1.4 !important;
+      box-sizing: border-box !important;
+    `;
+    
+    // 内部要素のスタイル調整
+    const elementsToStyle = [
+      { selector: '.container-xl, .container-lg', styles: 'max-width: none !important; width: 100% !important; padding: 0 !important; margin: 0 !important;' },
+      { selector: '.Layout-main', styles: 'width: 100% !important; max-width: none !important;' },
+      { selector: '.Layout-content', styles: 'width: 100% !important; max-width: none !important;' },
+      { selector: '.timeline-comment', styles: 'margin-bottom: 8px !important;' },
+      { selector: '.timeline-comment-header', styles: 'padding: 6px 8px !important; font-size: 11px !important;' },
+      { selector: '.comment-body', styles: 'padding: 8px !important; font-size: 12px !important;' },
+      { selector: '.markdown-body', styles: 'font-size: 12px !important; line-height: 1.4 !important;' },
+      { selector: '.markdown-body h1, .markdown-body h2, .markdown-body h3', styles: 'font-size: 14px !important; margin: 8px 0 4px 0 !important;' },
+      { selector: '.btn', styles: 'font-size: 11px !important; padding: 3px 6px !important;' },
+      { selector: 'table', styles: 'font-size: 11px !important;' },
+      { selector: 'pre, code', styles: 'font-size: 10px !important;' }
+    ];
+    
+    elementsToStyle.forEach(({ selector, styles }) => {
+      const elements = mainContent.querySelectorAll(selector);
+      elements.forEach(el => {
+        el.style.cssText += styles;
+      });
+    });
   }
 
   convertRelativeUrls(element, baseUrl) {
@@ -628,12 +1276,14 @@ class GitHubSidebarContent {
         event.preventDefault();
         const linkInfo = this.parseLinkInfo(href);
         if (linkInfo) {
+          console.log('Opening in sidebar:', linkInfo);
           this.loadPageInSidebar(linkInfo);
         }
-      } else if (href.startsWith('https://github.com')) {
+      } else if (href && (href.startsWith('https://github.com') || href.startsWith('/') && !href.startsWith('//'))) {
         // その他のGitHubリンクは新しいタブで開く
         event.preventDefault();
-        window.open(href, '_blank');
+        const fullUrl = href.startsWith('/') ? `https://github.com${href}` : href;
+        window.open(fullUrl, '_blank');
       }
     });
   }
@@ -707,6 +1357,146 @@ class GitHubSidebarContent {
         </div>
       `;
     }
+  }
+
+  enhanceStaticContent(linkInfo) {
+    // 静的コンテンツにインタラクティブな機能を追加
+    const pageContainer = this.sidebar.querySelector('#gh-sidebar-page-content');
+    if (!pageContainer) return;
+    
+    // アクションバーを追加
+    this.addActionBar(pageContainer, linkInfo);
+    
+    // ボタンに機能を追加
+    this.enhanceButtons(pageContainer, linkInfo);
+    
+    // フォームを機能させる
+    this.enhanceForms(pageContainer, linkInfo);
+  }
+  
+  addActionBar(container, linkInfo) {
+    const actionBar = document.createElement('div');
+    actionBar.className = 'sidebar-action-bar';
+    actionBar.style.cssText = `
+      background: #f6f8fa;
+      border-bottom: 1px solid #d1d9e0;
+      padding: 8px 12px;
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    `;
+    
+    actionBar.innerHTML = `
+      <span style="color: #656d76;">
+        📝 ${linkInfo.type === 'issue' ? 'Issue' : 'PR'} #${linkInfo.number} (読み取り専用)
+      </span>
+      <div>
+        <button id="refresh-sidebar" style="background: #f3f4f6; border: 1px solid #d1d9e0; padding: 4px 8px; margin-right: 4px; border-radius: 3px; font-size: 11px; cursor: pointer;">更新</button>
+        <button id="open-full-page" style="background: #0969da; color: white; border: none; padding: 4px 8px; border-radius: 3px; font-size: 11px; cursor: pointer;">新しいタブで開く</button>
+      </div>
+    `;
+    
+    // ボタンのイベントリスナー
+    actionBar.querySelector('#refresh-sidebar').addEventListener('click', () => {
+      this.loadPageInSidebar(linkInfo);
+    });
+    
+    actionBar.querySelector('#open-full-page').addEventListener('click', () => {
+      window.open(this.currentPageUrl, '_blank');
+    });
+    
+    container.insertBefore(actionBar, container.firstChild);
+  }
+  
+  enhanceButtons(container, linkInfo) {
+    // コメントボタン、反応ボタンなどを探して機能を追加
+    const buttons = container.querySelectorAll('button, .btn, [role="button"]');
+    
+    buttons.forEach(button => {
+      const buttonText = button.textContent?.toLowerCase() || '';
+      const buttonClass = button.className || '';
+      
+      // 反応ボタン
+      if (buttonClass.includes('reaction') || buttonText.includes('react')) {
+        this.enhanceReactionButton(button, linkInfo);
+      }
+      
+      // コメントボタン
+      if (buttonText.includes('comment') || buttonClass.includes('comment')) {
+        this.enhanceCommentButton(button, linkInfo);
+      }
+      
+      // ステータス変更ボタン
+      if (buttonText.includes('close') || buttonText.includes('reopen') || buttonClass.includes('state')) {
+        this.enhanceStateButton(button, linkInfo);
+      }
+    });
+  }
+  
+  enhanceReactionButton(button, linkInfo) {
+    // 反応ボタンの機能を追加
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      this.showTooltip(button, '反応を追加するには新しいタブで開いてください');
+    });
+  }
+  
+  enhanceCommentButton(button, linkInfo) {
+    // コメントボタンの機能を追加
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      this.showTooltip(button, 'コメントを投稿するには新しいタブで開いてください');
+    });
+  }
+  
+  enhanceStateButton(button, linkInfo) {
+    // ステータス変更ボタンの機能を追加
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      this.showTooltip(button, 'ステータスを変更するには新しいタブで開いてください');
+    });
+  }
+  
+  enhanceForms(container, linkInfo) {
+    // フォームの送信をブロックし、ガイダンスを表示
+    const forms = container.querySelectorAll('form');
+    
+    forms.forEach(form => {
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        this.showTooltip(form, 'フォームの送信は新しいタブで行ってください');
+      });
+    });
+  }
+  
+  showTooltip(element, message) {
+    // ツールチップを表示
+    const tooltip = document.createElement('div');
+    tooltip.textContent = message;
+    tooltip.style.cssText = `
+      position: absolute;
+      background: #24292f;
+      color: white;
+      padding: 6px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      z-index: 10001;
+      white-space: nowrap;
+      pointer-events: none;
+    `;
+    
+    const rect = element.getBoundingClientRect();
+    tooltip.style.top = (rect.top - 35) + 'px';
+    tooltip.style.left = rect.left + 'px';
+    
+    document.body.appendChild(tooltip);
+    
+    setTimeout(() => {
+      if (tooltip.parentNode) {
+        tooltip.parentNode.removeChild(tooltip);
+      }
+    }, 2000);
   }
 
   hideNoContent() {

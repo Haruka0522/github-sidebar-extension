@@ -4,7 +4,6 @@
 class BackgroundManager {
   constructor() {
     this.setupMessageListener();
-    this.setupWebRequestListener();
   }
 
   setupMessageListener() {
@@ -14,24 +13,7 @@ class BackgroundManager {
     });
   }
 
-  setupWebRequestListener() {
-    // X-Frame-Options ヘッダーを削除してiframe表示を許可
-    chrome.webRequest.onHeadersReceived.addListener(
-      (details) => {
-        const headers = details.responseHeaders || [];
-        const filteredHeaders = headers.filter(header => 
-          !['x-frame-options', 'content-security-policy'].includes(header.name.toLowerCase())
-        );
-        
-        return { responseHeaders: filteredHeaders };
-      },
-      {
-        urls: ['https://github.com/*'],
-        types: ['sub_frame']
-      },
-      ['blocking', 'responseHeaders']
-    );
-  }
+
 
   async handleMessage(message, sender, sendResponse) {
     try {
