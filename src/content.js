@@ -88,12 +88,12 @@ class GitHubSidebarContent {
       clearInterval(this.layoutMonitorInterval);
     }
     
-    // 定期的にレイアウトを再適用
+    // 定期的にレイアウトを再適用と状態チェック
     this.layoutMonitorInterval = setInterval(() => {
-      if (this.isVisible && document.body.classList.contains('github-sidebar-split-layout')) {
-        this.updatePageLayout();
+      if (this.isVisible) {
+        this.ensureSidebarLayout();
       }
-    }, 2000);
+    }, 1000); // より頻繁にチェック
     
     // DOM変更監視でより即座に対応
     if (this.layoutObserver) {
@@ -102,7 +102,16 @@ class GitHubSidebarContent {
     
     this.layoutObserver = new MutationObserver((mutations) => {
       let shouldUpdate = false;
+      let hasBodyClassChange = false;
+      
       mutations.forEach((mutation) => {
+        // body要素のクラス変更を検知
+        if (mutation.type === 'attributes' && 
+            mutation.target === document.body && 
+            mutation.attributeName === 'class') {
+          hasBodyClassChange = true;
+        }
+        
         if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
           // 新しいコンテンツが追加された場合
           for (let node of mutation.addedNodes) {
@@ -110,7 +119,8 @@ class GitHubSidebarContent {
               node.classList?.contains('container-xl') ||
               node.classList?.contains('container-lg') ||
               node.classList?.contains('repository-content') ||
-              node.querySelector?.('.container-xl, .container-lg, .repository-content')
+              node.classList?.contains('application-main') ||
+              node.querySelector?.('.container-xl, .container-lg, .repository-content, .application-main')
             )) {
               shouldUpdate = true;
               break;
@@ -119,19 +129,21 @@ class GitHubSidebarContent {
         }
       });
       
-      if (shouldUpdate && this.isVisible) {
+      if ((shouldUpdate || hasBodyClassChange) && this.isVisible) {
         // デバウンスして更新
         clearTimeout(this.layoutUpdateTimeout);
         this.layoutUpdateTimeout = setTimeout(() => {
-          this.updatePageLayout();
-        }, 100);
+          this.ensureSidebarLayout();
+        }, 50); // より高速な反応
       }
     });
     
-    // main要素とbodyを監視
+    // body要素の属性変更とコンテンツ変更を監視
     this.layoutObserver.observe(document.body, {
       childList: true,
-      subtree: true
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class']
     });
     
     const main = document.querySelector('main');
@@ -208,6 +220,8 @@ class GitHubSidebarContent {
   setupNavigationListener() {
     // GitHub SPAのナビゲーション監視
     let lastUrl = location.href;
+    
+    // URL変更の監視
     new MutationObserver(() => {
       const url = location.href;
       if (url !== lastUrl) {
@@ -217,6 +231,38 @@ class GitHubSidebarContent {
       // 動的に追加されたリンクにもイベントを設定
       this.attachLinkListeners();
     }).observe(document, { subtree: true, childList: true });
+    
+    // ブラウザの戻る・進むボタンの監視
+    window.addEventListener('popstate', () => {
+      setTimeout(() => {
+        this.handleNavigation();
+      }, 100);
+    });
+    
+    // GitHubのpjax（pushState/replaceState）ナビゲーションの監視
+    const originalPushState = history.pushState;
+    const originalReplaceState = history.replaceState;
+    
+    history.pushState = function() {
+      originalPushState.apply(history, arguments);
+      setTimeout(() => {
+        if (window.githubSidebarInstance) {
+          window.githubSidebarInstance.handleNavigation();
+        }
+      }, 100);
+    };
+    
+    history.replaceState = function() {
+      originalReplaceState.apply(history, arguments);
+      setTimeout(() => {
+        if (window.githubSidebarInstance) {
+          window.githubSidebarInstance.handleNavigation();
+        }
+      }, 100);
+    };
+    
+    // 自分自身をグローバルに登録（history API監視用）
+    window.githubSidebarInstance = this;
   }
 
   setupLinkInterception() {
@@ -330,11 +376,42 @@ class GitHubSidebarContent {
     const oldRepo = this.currentRepo;
     this.detectRepository();
     
+    // サイドバーが表示中の場合、ページ遷移後にレイアウトを再適用
+    if (this.isVisible) {
+      // 短い遅延でレイアウトを再適用（DOMの更新を待つ）
+      setTimeout(() => {
+        this.ensureSidebarLayout();
+      }, 100);
+      
+      // より確実にするため、さらに遅延してもう一度適用
+      setTimeout(() => {
+        this.ensureSidebarLayout();
+      }, 500);
+    }
+    
     // リポジトリが変更された場合、サイドバーを更新
     if (JSON.stringify(oldRepo) !== JSON.stringify(this.currentRepo)) {
       if (this.sidebar && this.isVisible) {
         this.updateSidebarContent();
       }
+    }
+  }
+
+  ensureSidebarLayout() {
+    // サイドバー表示中のレイアウトを確実に適用
+    if (!this.isVisible) return;
+    
+    // CSSクラスが消えている場合は再適用
+    if (!document.body.classList.contains('github-sidebar-split-layout')) {
+      document.body.classList.add('github-sidebar-split-layout', 'github-sidebar-active');
+    }
+    
+    // レイアウトスタイルを再適用
+    this.updatePageLayout();
+    
+    // サイドバーのスタイルも確認・修正
+    if (this.sidebar) {
+      this.updateSidebarStyles();
     }
   }
 
