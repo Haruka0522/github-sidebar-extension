@@ -1,70 +1,146 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+このファイルは、Claude Code (claude.ai/code) がこのリポジトリのコードを操作する際のガイダンスを提供します。
 
-## Project Overview
+## プロジェクト概要
 
-This is a Chrome extension project that provides a sidebar interface for viewing GitHub Issues and Pull Requests. The extension allows users to efficiently browse and manage GitHub content without navigating away from their current page.
+このプロジェクトは、GitHubのIssueとPull Requestをサイドバーインターフェースで表示するChrome拡張機能です。ユーザーは現在のページから離れることなく、効率的にGitHubコンテンツを閲覧・管理できます。
 
-## Development Commands
+## 現在の実装状況
 
-Since this is a Chrome extension project, development is primarily file-based without build tools. The extension can be loaded directly into Chrome for testing:
+### ✅ 完了した機能
+1. **基本的な拡張機能構造** - Manifest V3ベースの実装
+2. **リンクインターセプト** - Issue/PRリンクのクリック検知とページ遷移防止
+3. **サイドバー表示** - 右側からスライドインするサイドバーUI
+4. **iframe統合** - declarativeNetRequest APIでX-Frame-Options/CSPヘッダー削除
+5. **完全なGitHub機能** - コメント投稿、ステータス変更等の全機能利用可能
+6. **サイドバーリサイズ** - マウスドラッグによる幅調整機能
+7. **全ページレイアウト対応** - 全GitHubページタイプでの重なり問題解決
+8. **動的レイアウト監視** - GitHub SPA ナビゲーション対応
+9. **ページ遷移時レイアウト維持** - サイドバー表示中のナビゲーション対応
 
-1. **Load Extension for Testing:**
-   - Open Chrome and navigate to `chrome://extensions/`
-   - Enable "Developer mode"
-   - Click "Load unpacked" and select the project directory
-   - Reload the extension after making changes
+### 🏗️ 技術的実装詳細
 
-2. **Debugging:**
-   - Use Chrome DevTools for debugging content scripts and sidebar
-   - Access background script logs via `chrome://extensions/` → "Inspect views: background page"
-   - Use `console.log()` statements for debugging during development
+#### 1. レイアウトシステム
+- **適応型レイアウト**: body要素に右マージンを追加してサイドバー領域を確保
+- **ヘッダー/フッター対応**: 画面全幅要素は負マージン+パディングで調整
+- **レスポンシブ対応**: 小画面では自動的にサイドバー幅を制限
 
-## Architecture
+#### 2. ナビゲーション監視
+- **MutationObserver**: DOM変更の即座検知
+- **History API監視**: pushState/replaceStateのオーバーライド
+- **popstateイベント**: 戻る・進むボタン対応
+- **定期チェック**: 1秒間隔での状態確認
 
-### Core Components
+#### 3. パフォーマンス最適化
+- **デバウンス機能**: レイアウト更新の最適化
+- **requestAnimationFrame**: スムーズなリサイズアニメーション
+- **条件付き更新**: 必要時のみレイアウト再適用
 
-- **`manifest.json`** - Chrome extension configuration, permissions, and entry points
-- **`background.js`** - Background service worker handling API calls and cross-tab communication
-- **`content.js`** - Content script injected into web pages to create sidebar interface
-- **`sidebar/`** - Sidebar UI components (HTML, CSS, JavaScript)
-- **`popup/`** - Extension popup interface for quick settings
-- **`options/`** - Extension options/settings page
+## 開発コマンド
 
-### Key Architectural Patterns
+Chrome拡張機能なので、主にファイルベースの開発です：
 
-1. **Message Passing:** Communication between content script, background script, and sidebar uses Chrome's message passing API
-2. **GitHub API Integration:** Background script handles all GitHub API calls to avoid CORS issues
-3. **Storage Management:** Chrome Storage API for persisting user settings and cached data
-4. **Modular UI:** Sidebar components are organized as separate modules for maintainability
+1. **テスト用拡張機能の読み込み:**
+   - Chrome で `chrome://extensions/` を開く
+   - 「デベロッパーモード」を有効化
+   - 「パッケージ化されていない拡張機能を読み込む」でプロジェクトディレクトリを選択
+   - 変更後は拡張機能をリロード
 
-### Authentication Flow
+2. **デバッグ:**
+   - Chrome DevTools でコンテンツスクリプトとサイドバーをデバッグ
+   - `chrome://extensions/` → 「background page を検査」でバックグラウンドスクリプトログを確認
+   - 開発中は `console.log()` を使用
 
-The extension uses GitHub Personal Access Tokens for API authentication:
-1. User provides token through options page
-2. Token is securely stored using Chrome Storage API
-3. Background script includes token in API request headers
-4. All API calls are proxied through background script
+## アーキテクチャ
 
-### Data Flow
+### コアコンポーネント
 
-1. Content script creates and manages sidebar DOM element
-2. Sidebar UI requests data through message passing to background script
-3. Background script fetches data from GitHub API
-4. Results are passed back to sidebar for display
-5. Local caching reduces API calls and improves performance
+- **`manifest.json`** - Chrome拡張の設定、権限、エントリポイント
+- **`src/background.js`** - Service Worker（GitHub API呼び出し処理）
+- **`src/content.js`** - サイドバーインターフェース作成のコンテンツスクリプト
+- **`src/sidebar.css`** - サイドバーのスタイリング
+- **`src/popup.html/js`** - 拡張機能ポップアップインターフェース
+- **`rules.json`** - declarativeNetRequest ルール定義
 
-## Security Considerations
+### 主要アーキテクチャパターン
 
-- Never store GitHub tokens in plaintext or commit them to version control
-- Validate all user inputs before making API calls
-- Use Chrome's built-in CSP protection for the extension
-- Sanitize any GitHub content before rendering in the sidebar
+1. **メッセージパッシング:** コンテンツスクリプト、バックグラウンドスクリプト、サイドバー間の通信
+2. **iframe統合:** declarativeNetRequest APIによるヘッダー削除で完全なGitHub体験
+3. **ストレージ管理:** Chrome Storage APIでユーザー設定とキャッシュデータの永続化
+4. **レスポンシブUI:** 動的なレイアウト調整とリサイズ機能
 
-## GitHub API Usage
+### 認証フロー
 
-- Use GitHub REST API v3 for primary functionality
-- Implement proper rate limiting and error handling
-- Cache responses when appropriate to reduce API calls
-- Support both public and private repositories based on token permissions
+現在の実装では **GitHub APIトークンは不要** です：
+1. iframe内で直接GitHubページを表示
+2. ユーザーの既存GitHubセッションを利用
+3. 完全なネイティブGitHub体験を提供
+
+### データフロー
+
+1. コンテンツスクリプトがサイドバーDOM要素を作成・管理
+2. Issue/PRリンククリックを検知してページ遷移を防止
+3. サイドバー内のiframeで実際のGitHubページを表示
+4. declarativeNetRequest APIでフレーミング制限を回避
+5. 動的レイアウト監視でページ遷移時もレイアウト維持
+
+## セキュリティ考慮事項
+
+- Chrome拡張のCSP保護を使用
+- GitHub APIトークンを使用しないため、認証情報の漏洩リスクなし
+- ユーザーの既存GitHubセッションを安全に利用
+
+## 実装済み機能の詳細
+
+### 1. サイドバーリサイズ機能
+- マウスドラッグによる幅調整（300px - 800px）
+- リアルタイムでiframe内コンテンツも連動
+- Chrome Storage APIで幅設定を永続化
+
+### 2. 全ページレイアウト対応
+- レポジトリページ、ファイルブラウザ、コミット一覧、ブランチ一覧等
+- GitHubの新UIコンポーネント（AppHeader、Layout、Container等）対応
+- 適切な幅調整でコンテンツの自然な表示を維持
+
+### 3. GitHub SPA ナビゲーション対応
+- `ensureSidebarLayout()`: ページ遷移後の自動レイアウト復元
+- 包括的なナビゲーション検知（popstate、pushState、replaceState）
+- 動的DOM監視による即座のレイアウト調整
+
+### 4. パフォーマンス最適化
+- デバウンス機能（50ms）でレイアウト更新を制御
+- MutationObserverによる効率的なDOM変更監視
+- requestAnimationFrameを使用したスムーズなアニメーション
+
+## 開発履歴
+
+### Phase 1: 基本実装 (完了)
+- Chrome拡張基本構造の構築
+- GitHub APIベースのサイドバー（初期アプローチ）
+- リンクインターセプト機能
+
+### Phase 2: iframe統合 (完了)
+- declarativeNetRequest APIの実装
+- 完全なGitHub機能統合
+- サイドバーリサイズ機能
+
+### Phase 3: レイアウト最適化 (完了)
+- 全GitHubページ対応
+- 動的レイアウト監視システム
+- ページ遷移時のレイアウト維持
+
+## 今後の拡張可能性
+
+- **キーボードショートカット**: サイドバー表示切り替え
+- **テーマ対応**: ダークモード自動切り替え
+- **カスタマイズ機能**: サイドバー位置設定（左/右）
+- **パフォーマンス改善**: より効率的なDOM監視
+- **アクセシビリティ**: スクリーンリーダー対応
+
+## デバッグのヒント
+
+- **レイアウト問題**: `ensureSidebarLayout()` の実行状況を確認
+- **ナビゲーション問題**: `handleNavigation()` の呼び出しログを監視
+- **iframe問題**: declarativeNetRequestルールの適用状況をNetwork タブで確認
+- **パフォーマンス**: MutationObserverの発火頻度をコンソールで監視
