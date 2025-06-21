@@ -14,6 +14,11 @@ class GitHubSidebarContent {
     this.lastResizeTime = 0;
     this.resizeAnimationFrame = null;
     
+    // 動的レイアウト監視用変数
+    this.layoutMonitorInterval = null;
+    this.layoutObserver = null;
+    this.layoutUpdateTimeout = null;
+    
     // iframeスタイル更新の最適化されたデバウンス関数
     this.debouncedUpdateIframeStyles = this.debounce(() => {
       this.updateIframeStyles();
@@ -43,27 +48,117 @@ class GitHubSidebarContent {
 
   injectLayoutStyles() {
     // GitHubページのレイアウトを調整するCSSを注入
+    const existingStyle = document.getElementById('github-sidebar-layout-styles');
+    if (existingStyle) {
+      existingStyle.remove();
+    }
+    
     const style = document.createElement('style');
     style.id = 'github-sidebar-layout-styles';
+    
+    // 初期スタイル（サイドバー非表示時）
     style.textContent = `
-      /* GitHub Sidebar Layout Adjustments */
-      .github-sidebar-split-layout .container-xl,
-      .github-sidebar-split-layout .container-lg {
-        max-width: none !important;
-        width: calc(100% - ${this.sidebarWidth + 20}px) !important;
-        margin-right: ${this.sidebarWidth + 20}px !important;
-      }
-      
-      .github-sidebar-split-layout main {
-        max-width: none !important;
-        width: 100% !important;
-      }
-      
+      /* GitHub Sidebar Layout Adjustments - Initial */
       .github-sidebar-active {
         overflow-x: hidden;
+        position: relative;
       }
     `;
+    
     document.head.appendChild(style);
+  }
+
+  resetPageLayout() {
+    // サイドバー非表示時にページレイアウトを元に戻す
+    const style = document.getElementById('github-sidebar-layout-styles');
+    if (style) {
+      style.textContent = `
+        /* GitHub Sidebar Layout Adjustments - Reset */
+        .github-sidebar-active {
+          overflow-x: hidden;
+          position: relative;
+        }
+      `;
+    }
+  }
+
+  startLayoutMonitoring() {
+    // 動的レイアウト監視を開始（GitHub SPA対応）
+    if (this.layoutMonitorInterval) {
+      clearInterval(this.layoutMonitorInterval);
+    }
+    
+    // 定期的にレイアウトを再適用
+    this.layoutMonitorInterval = setInterval(() => {
+      if (this.isVisible && document.body.classList.contains('github-sidebar-split-layout')) {
+        this.updatePageLayout();
+      }
+    }, 2000);
+    
+    // DOM変更監視でより即座に対応
+    if (this.layoutObserver) {
+      this.layoutObserver.disconnect();
+    }
+    
+    this.layoutObserver = new MutationObserver((mutations) => {
+      let shouldUpdate = false;
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+          // 新しいコンテンツが追加された場合
+          for (let node of mutation.addedNodes) {
+            if (node.nodeType === 1 && ( // Element node
+              node.classList?.contains('container-xl') ||
+              node.classList?.contains('container-lg') ||
+              node.classList?.contains('repository-content') ||
+              node.querySelector?.('.container-xl, .container-lg, .repository-content')
+            )) {
+              shouldUpdate = true;
+              break;
+            }
+          }
+        }
+      });
+      
+      if (shouldUpdate && this.isVisible) {
+        // デバウンスして更新
+        clearTimeout(this.layoutUpdateTimeout);
+        this.layoutUpdateTimeout = setTimeout(() => {
+          this.updatePageLayout();
+        }, 100);
+      }
+    });
+    
+    // main要素とbodyを監視
+    this.layoutObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+    
+    const main = document.querySelector('main');
+    if (main) {
+      this.layoutObserver.observe(main, {
+        childList: true,
+        subtree: true
+      });
+    }
+  }
+
+  stopLayoutMonitoring() {
+    // 動的レイアウト監視を停止
+    if (this.layoutMonitorInterval) {
+      clearInterval(this.layoutMonitorInterval);
+      this.layoutMonitorInterval = null;
+    }
+    
+    if (this.layoutObserver) {
+      this.layoutObserver.disconnect();
+      this.layoutObserver = null;
+    }
+    
+    if (this.layoutUpdateTimeout) {
+      clearTimeout(this.layoutUpdateTimeout);
+      this.layoutUpdateTimeout = null;
+    }
   }
 
   isGitHubPage() {
@@ -441,22 +536,96 @@ class GitHubSidebarContent {
     // GitHubページのレイアウトを動的に調整
     const style = document.getElementById('github-sidebar-layout-styles');
     if (style) {
+      const sidebarSpace = this.sidebarWidth + 20;
+      
       style.textContent = `
-        /* GitHub Sidebar Layout Adjustments */
-        .github-sidebar-split-layout .container-xl,
-        .github-sidebar-split-layout .container-lg {
-          max-width: none !important;
-          width: calc(100% - ${this.sidebarWidth + 20}px) !important;
-          margin-right: ${this.sidebarWidth + 20}px !important;
-        }
+        /* GitHub Sidebar Layout Adjustments - 適切なレイアウト調整 */
         
-        .github-sidebar-split-layout main {
-          max-width: none !important;
-          width: 100% !important;
-        }
-        
+        /* グローバル調整 */
         .github-sidebar-active {
-          overflow-x: hidden;
+          overflow-x: hidden !important;
+          position: relative !important;
+        }
+        
+        /* ボディ全体の調整 - サイドバー分だけ右マージンを追加 */
+        .github-sidebar-split-layout {
+          margin-right: ${sidebarSpace}px !important;
+          box-sizing: border-box !important;
+        }
+        
+        /* ヘッダーは幅を維持して固定 */
+        .github-sidebar-split-layout .Header,
+        .github-sidebar-split-layout .AppHeader {
+          margin-right: -${sidebarSpace}px !important;
+          padding-right: ${sidebarSpace + 16}px !important;
+          box-sizing: border-box !important;
+        }
+        
+        /* メインコンテナ - 自然な幅で表示 */
+        .github-sidebar-split-layout .container-xl,
+        .github-sidebar-split-layout .container-lg,
+        .github-sidebar-split-layout .container-md,
+        .github-sidebar-split-layout .container {
+          margin-right: 0 !important;
+          padding-right: 16px !important;
+          box-sizing: border-box !important;
+        }
+        
+        /* メインエリア - 自然な幅を維持 */
+        .github-sidebar-split-layout main,
+        .github-sidebar-split-layout [role="main"],
+        .github-sidebar-split-layout .application-main {
+          margin-right: 0 !important;
+          box-sizing: border-box !important;
+        }
+        
+        /* フッターも同様にヘッダーと同じ処理 */
+        .github-sidebar-split-layout .footer,
+        .github-sidebar-split-layout .Footer {
+          margin-right: -${sidebarSpace}px !important;
+          padding-right: ${sidebarSpace + 16}px !important;
+          box-sizing: border-box !important;
+        }
+        
+        /* PRやIssue用の特別調整 - 既存のPR調整は維持 */
+        .github-sidebar-split-layout .pr-toolbar,
+        .github-sidebar-split-layout .pull-request-tab-content,
+        .github-sidebar-split-layout .timeline-comment-wrapper,
+        .github-sidebar-split-layout .js-timeline-progressive-focus-container {
+          margin-right: 0 !important;
+          box-sizing: border-box !important;
+        }
+        
+        /* 最小幅制約を緩和 */
+        .github-sidebar-split-layout .container-xl {
+          min-width: 0 !important;
+        }
+        
+        .github-sidebar-split-layout .container-lg {
+          min-width: 0 !important;
+        }
+        
+        /* テーブルやリスト要素の横スクロール対応 */
+        .github-sidebar-split-layout .js-navigation-container,
+        .github-sidebar-split-layout .blob-wrapper,
+        .github-sidebar-split-layout .diff-table {
+          overflow-x: auto !important;
+          box-sizing: border-box !important;
+        }
+        
+        /* レスポンシブ対応 */
+        @media (max-width: 1200px) {
+          .github-sidebar-split-layout {
+            margin-right: ${Math.min(sidebarSpace, 300)}px !important;
+          }
+          
+          .github-sidebar-split-layout .Header,
+          .github-sidebar-split-layout .AppHeader,
+          .github-sidebar-split-layout .footer,
+          .github-sidebar-split-layout .Footer {
+            margin-right: -${Math.min(sidebarSpace, 300)}px !important;
+            padding-right: ${Math.min(sidebarSpace, 300) + 16}px !important;
+          }
         }
       `;
     }
@@ -592,6 +761,9 @@ class GitHubSidebarContent {
     this.updateSidebarStyles();
     this.updatePageLayout();
     
+    // 動的レイアウト監視を開始
+    this.startLayoutMonitoring();
+    
     // iframe内のスタイルも更新
     setTimeout(() => {
       this.updateIframeStyles();
@@ -607,6 +779,12 @@ class GitHubSidebarContent {
     
     // GitHubページのレイアウトを通常モードに戻す
     document.body.classList.remove('github-sidebar-split-layout', 'github-sidebar-active');
+    
+    // 動的レイアウト監視を停止
+    this.stopLayoutMonitoring();
+    
+    // レイアウト調整スタイルをリセット
+    this.resetPageLayout();
   }
 
   toggleSidebar() {
