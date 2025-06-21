@@ -774,12 +774,64 @@
   display: none !important;
 }
 
-/* Dark mode support */
+/* JavaScript による明示的なダークテーマクラス */
+.github-sidebar-dark-theme .github-sidebar-container {
+  background: #0d1117;
+  color: #e6edf3;
+  border-left-color: #21262d;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.3);
+}
+
+.github-sidebar-dark-theme .github-sidebar {
+  background: #0d1117;
+  color: #e6edf3;
+}
+
+.github-sidebar-dark-theme .sidebar-header {
+  background: #161b22;
+  border-bottom-color: #21262d;
+  color: #e6edf3;
+}
+
+.github-sidebar-dark-theme .sidebar-title {
+  color: #e6edf3;
+}
+
+.github-sidebar-dark-theme .icon-btn {
+  color: #7d8590;
+}
+
+.github-sidebar-dark-theme .icon-btn:hover {
+  background: #30363d;
+  color: #f0f6fc;
+}
+
+.github-sidebar-dark-theme .content-area {
+  background: #0d1117;
+}
+
+.github-sidebar-dark-theme .loading {
+  color: #7d8590;
+  background: #0d1117;
+}
+
+.github-sidebar-dark-theme .spinner {
+  border-color: #21262d;
+  border-top-color: #4fc3f7;
+}
+
+.github-sidebar-dark-theme .no-content {
+  color: #7d8590;
+  background: #0d1117;
+}
+
+/* システム設定によるダークモード対応 */
 @media (prefers-color-scheme: dark) {
   .github-sidebar-container {
     background: #0d1117;
     color: #e6edf3;
-    border-left-color: #30363d;
+    border-left-color: #21262d;
+    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.3);
   }
   
   .github-sidebar {
@@ -788,58 +840,104 @@
   }
   
   .gh-sidebar-resize-handle:hover {
-    background: rgba(58, 123, 213, 0.3);
+    background: rgba(79, 172, 254, 0.3);
   }
   
   .gh-sidebar-resize-handle:active {
-    background: rgba(58, 123, 213, 0.5);
+    background: rgba(79, 172, 254, 0.5);
   }
   
+  /* iframe コンテンツは GitHub ネイティブテーマに任せる */
   .github-page-content {
     background: #0d1117 !important;
-    color: #e6edf3 !important;
   }
   
-  .github-page-content .file-header {
-    background: #161b22 !important;
-    border-color: #30363d !important;
-  }
-  
-  .github-page-content .diffbar {
-    background: #161b22 !important;
-    border-color: #30363d !important;
-  }
-
+  /* サイドバーヘッダー */
   .sidebar-header {
     background: #161b22;
-    border-bottom-color: #30363d;
+    border-bottom-color: #21262d;
+    color: #e6edf3;
   }
 
   .sidebar-title {
     color: #e6edf3;
   }
 
+  /* アイコンボタン */
   .icon-btn {
     color: #7d8590;
   }
 
   .icon-btn:hover {
-    background: #21262d;
-    color: #e6edf3;
+    background: #30363d;
+    color: #f0f6fc;
   }
 
+  .icon-btn:active {
+    background: #21262d;
+  }
+
+  /* コンテンツエリア */
+  .content-area {
+    background: #0d1117;
+  }
+
+  /* ローディング表示 */
+  .loading {
+    color: #7d8590;
+    background: #0d1117;
+  }
+
+  .spinner {
+    border-color: #21262d;
+    border-top-color: #4fc3f7;
+  }
+
+  /* エラーメッセージ */
+  .error-message {
+    color: #f85149;
+    background: #0d1117;
+  }
+
+  .error-text {
+    color: #f85149;
+  }
+
+  .retry-btn, .configure-btn {
+    background: #238636;
+    color: #ffffff;
+  }
+
+  .retry-btn:hover, .configure-btn:hover {
+    background: #2ea043;
+  }
+
+  /* No content メッセージ */
+  .no-content {
+    color: #7d8590;
+    background: #0d1117;
+  }
+
+  /* 旧UIコンポーネント（使用されていない場合の保険） */
   .repo-selector {
-    border-bottom-color: #30363d;
+    border-bottom-color: #21262d;
+    background: #0d1117;
   }
 
   .repo-select, .filter-select, .search-input {
-    background: #0d1117;
+    background: #21262d;
     color: #e6edf3;
     border-color: #30363d;
   }
 
+  .repo-select:focus, .filter-select:focus, .search-input:focus {
+    border-color: #4fc3f7;
+    box-shadow: 0 0 0 3px rgba(79, 195, 247, 0.1);
+  }
+
   .tab-container {
-    border-bottom-color: #30363d;
+    border-bottom-color: #21262d;
+    background: #0d1117;
   }
 
   .tab {
@@ -848,6 +946,21 @@
 
   .tab.active {
     color: #e6edf3;
+    border-bottom-color: #fd7e14;
+  }
+
+  .tab:hover:not(.active) {
+    color: #e6edf3;
+  }
+
+  .count {
+    background: #21262d;
+    color: #7d8590;
+  }
+
+  .tab.active .count {
+    background: #fd7e14;
+    color: #ffffff;
   }
 
   .filters {
@@ -868,5 +981,20 @@
 
   .item-meta, .item-author, .item-date, .item-number {
     color: #7d8590;
+  }
+
+  .item-state.open {
+    background: #238636;
+    color: #ffffff;
+  }
+
+  .item-state.closed {
+    background: #da3633;
+    color: #ffffff;
+  }
+
+  .item-state.merged {
+    background: #8957e5;
+    color: #ffffff;
   }
 }
