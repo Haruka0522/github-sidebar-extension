@@ -278,9 +278,10 @@ class GitHubSidebarContent {
 
   attachLinkListeners() {
     // Issue/PRへのリンクを検出してイベントリスナーを追加
+    // より具体的なセレクタで既存のIssue/PRのみを対象
     const linkSelectors = [
-      'a[href*="/issues/"]',
-      'a[href*="/pull/"]',
+      'a[href*="/issues/"]:not([href*="/issues/new"]):not([href*="/issues/templates"])',
+      'a[href*="/pull/"]:not([href*="/pull/new"]):not([href*="/compare"])',
       'a[data-hovercard-type="issue"]',
       'a[data-hovercard-type="pull_request"]',
       '.js-issue-row a',
@@ -327,7 +328,29 @@ class GitHubSidebarContent {
 
   isIssueOrPRLink(href) {
     if (!href) return false;
-    return href.includes('/issues/') || href.includes('/pull/') || href.match(/\/pull\/\d+/);
+    
+    // 新しいIssue/PR作成ページやテンプレートページは除外
+    const excludePatterns = [
+      '/issues/new',           // 新しいIssue作成
+      '/issues/templates',     // Issueテンプレート選択
+      '/pull/new',            // 新しいPR作成
+      '/compare/',            // PR作成のcompare画面
+      '/pulls/new',           // 別のPR作成パス
+    ];
+    
+    // 除外パターンに一致する場合はfalse
+    for (const pattern of excludePatterns) {
+      if (href.includes(pattern)) {
+        return false;
+      }
+    }
+    
+    // 既存のIssue/PRの詳細ページのみを対象とする
+    // 数字で終わるIssue/PRページ（例: /issues/123, /pull/456）
+    const issuePattern = /\/issues\/\d+($|[\?#])/;
+    const prPattern = /\/pull\/\d+($|[\?#])/;
+    
+    return issuePattern.test(href) || prPattern.test(href);
   }
 
   parseLinkInfo(href) {
