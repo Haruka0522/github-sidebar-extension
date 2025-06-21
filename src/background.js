@@ -58,7 +58,7 @@ class BackgroundManager {
           sendResponse({ success: false, error: 'Unknown action' });
       }
     } catch (error) {
-      console.error('Background script error:', error);
+      // Background script error occurred
       sendResponse({ success: false, error: error.message });
     }
   }
@@ -277,7 +277,7 @@ class BackgroundManager {
       sendResponse({ success: true, content });
       
     } catch (error) {
-      console.error('Failed to fetch GitHub page:', error);
+      // Failed to fetch GitHub page
       sendResponse({ success: false, error: error.message });
     }
   }
