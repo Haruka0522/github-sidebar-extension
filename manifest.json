@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "GitHub Sidebar",
+  "version": "1.0.0",
+  "description": "View GitHub Issues and Pull Requests in a convenient sidebar",
+  
+  "permissions": [
+    "storage",
+    "activeTab",
+    "webRequest",
+    "webRequestBlocking"
+  ],
+  
+  "host_permissions": [
+    "https://api.github.com/*",
+    "https://github.com/*"
+  ],
+  
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  
+  "content_scripts": [
+    {
+      "matches": ["https://github.com/*", "https://*.github.com/*"],
+      "js": ["src/content.js"],
+      "css": ["src/sidebar.css"]
+    }
+  ],
+  
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "GitHub Sidebar Settings"
+  },
+
+  "web_accessible_resources": [
+    {
+      "resources": ["src/*"],
+      "matches": ["https://github.com/*"]
+    }
+  ]
+}

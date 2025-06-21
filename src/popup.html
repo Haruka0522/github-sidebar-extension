@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Sidebar - Settings</title>
+    <style>
+        body {
+            width: 300px;
+            padding: 16px;
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-size: 14px;
+            background: #ffffff;
+            color: #1f2328;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            margin: 0 0 8px 0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .header p {
+            margin: 0;
+            color: #656d76;
+            font-size: 12px;
+        }
+
+        .section {
+            margin-bottom: 20px;
+        }
+
+        .section h3 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .token-section {
+            padding: 12px;
+            background: #f6f8fa;
+            border-radius: 6px;
+            margin-bottom: 16px;
+        }
+
+        .input-group {
+            margin-bottom: 12px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            color: #1f2328;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #d1d9e0;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #0969da;
+            box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.1);
+        }
+
+        .button {
+            background: #0969da;
+            color: #ffffff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            width: 100%;
+        }
+
+        .button:hover {
+            background: #0550ae;
+        }
+
+        .button.secondary {
+            background: #f6f8fa;
+            color: #1f2328;
+            border: 1px solid #d1d9e0;
+        }
+
+        .button.secondary:hover {
+            background: #f3f4f6;
+        }
+
+        .status {
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+
+        .status.success {
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+        }
+
+        .status.error {
+            background: #fef2f2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+
+        .status.info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #bfdbfe;
+        }
+
+        .quick-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .quick-actions .button {
+            flex: 1;
+        }
+
+        .help-link {
+            color: #0969da;
+            text-decoration: none;
+            font-size: 12px;
+        }
+
+        .help-link:hover {
+            text-decoration: underline;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>GitHub Sidebar</h1>
+        <p>View Issues and PRs in a sidebar</p>
+    </div>
+
+    <div id="status-message" class="status hidden">
+        <span id="status-text"></span>
+    </div>
+
+    <div class="section">
+        <div class="token-section">
+            <h3>GitHub Personal Access Token</h3>
+            <div class="input-group">
+                <label for="token-input">Token:</label>
+                <input type="password" id="token-input" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+            </div>
+            <button id="save-token-btn" class="button">Save Token</button>
+            <div style="margin-top: 8px;">
+                <a href="https://github.com/settings/tokens/new" target="_blank" class="help-link">
+                    Create new token →
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>Quick Actions</h3>
+        <div class="quick-actions">
+            <button id="toggle-sidebar-btn" class="button secondary">Toggle Sidebar</button>
+            <button id="refresh-btn" class="button secondary">Refresh</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>Current Page</h3>
+        <div id="current-repo" class="status info">
+            Detecting repository...
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
