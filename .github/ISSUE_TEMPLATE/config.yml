@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📚 ドキュメント・README
+    url: https://github.com/Haruka0522/github-sidebar-extension/blob/main/README.md
+    about: 拡張機能の使い方やトラブルシューティングガイド
+  - name: 💬 ディスカッション
+    url: https://github.com/Haruka0522/github-sidebar-extension/discussions
+    about: 一般的な質問、アイデア共有、コミュニティディスカッション
+  - name: 🔒 セキュリティ問題の報告
+    url: https://github.com/Haruka0522/github-sidebar-extension/security/advisories/new
+    about: セキュリティに関する脆弱性を非公開で報告する
