@@ -1,0 +1,248 @@
+/* GitHub Iframe Styles for Sidebar Integration */
+
+/* ヘッダー、フッター、ナビゲーションを非表示 */
+.Header, .footer, .js-header-wrapper { 
+  display: none !important; 
+}
+
+.subnav, .pagehead, .BorderGrid-row .BorderGrid-cell:first-child { 
+  display: none !important; 
+}
+
+.js-notification-shelf, .js-flash-container { 
+  display: none !important; 
+}
+
+/* ボディとメインコンテナの基本設定 */
+html, body {
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow-x: hidden !important;
+  background: #ffffff !important;
+  box-sizing: border-box !important;
+}
+
+/* メインコンテナの設定 */
+.container-xl, .container-lg, .container-md, .container {
+  padding: 8px !important;
+  margin: 0 auto !important;
+  box-sizing: border-box !important;
+}
+
+/* レイアウト調整 */
+.Layout, .Layout-main, .Layout-content {
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+}
+
+/* サイドバー要素を非表示 */
+.Layout-sidebar, .sidebar-component {
+  display: none !important;
+}
+
+/* グリッドレイアウト調整 */
+.gutter-condensed, .gutter-spacious {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* フォントサイズ調整 */
+body { 
+  font-size: 13px !important; 
+  line-height: 1.4 !important; 
+}
+
+/* タイムライン調整 */
+.timeline-comment { 
+  margin-bottom: 8px !important; 
+}
+
+.timeline-comment-header { 
+  padding: 6px 8px !important; 
+  font-size: 11px !important; 
+}
+
+.comment-body { 
+  padding: 8px !important; 
+  font-size: 12px !important; 
+}
+
+/* マークダウン調整 */
+.markdown-body {
+  font-size: 12px !important;
+  line-height: 1.4 !important;
+}
+
+.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+  font-size: 14px !important;
+  margin: 8px 0 4px 0 !important;
+}
+
+.markdown-body p {
+  margin: 6px 0 !important;
+}
+
+.markdown-body pre {
+  font-size: 10px !important;
+  padding: 6px !important;
+  overflow-x: auto !important;
+}
+
+/* ボタン、フォーム調整 */
+.btn { 
+  font-size: 11px !important; 
+  padding: 4px 8px !important; 
+}
+
+/* テーブル調整 */
+table { 
+  font-size: 11px !important; 
+}
+
+/* 幅が固定された要素の調整 */
+[style*="width:"] {
+  width: auto !important;
+}
+
+.width-full {
+  width: 100% !important;
+}
+
+/* コンテンツの基本設定 */
+* {
+  box-sizing: border-box !important;
+}
+
+/* スクロール可能要素の調整 */
+.overflow-auto, .overflow-x-auto {
+  max-width: 100% !important;
+}
+
+/* 強制的な幅制限 */
+#js-repo-pjax-container,
+.application-main,
+[data-turbo-body] {
+  overflow-x: hidden !important;
+}
+
+/* フレックスレイアウト調整 */
+.d-flex {
+  flex-wrap: wrap !important;
+}
+
+/* PR固有の要素調整 */
+.pr-toolbar, .pull-request-tab-content {
+  margin: 0 !important;
+  padding: 6px !important;
+  box-sizing: border-box !important;
+}
+
+.diffbar {
+  font-size: 10px !important;
+  padding: 4px 6px !important;
+}
+
+.file-header {
+  font-size: 10px !important;
+  padding: 4px 6px !important;
+}
+
+.diff-table {
+  font-size: 10px !important;
+  line-height: 1.2 !important;
+  overflow-x: auto !important;
+}
+
+.blob-code {
+  font-size: 9px !important;
+  padding: 0 4px !important;
+  line-height: 1.2 !important;
+  white-space: pre-wrap !important;
+  word-break: break-all !important;
+}
+
+.blob-code-inner {
+  max-width: 100% !important;
+  overflow-wrap: break-word !important;
+  word-break: break-all !important;
+}
+
+/* スクロールバー調整 */
+::-webkit-scrollbar {
+  width: 6px !important;
+  height: 6px !important;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1 !important;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1 !important;
+  border-radius: 3px !important;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8 !important;
+}
+
+/* 動的幅設定用のCSS変数を使用 */
+:root {
+  --sidebar-width: 400px;
+  --container-width: 384px;
+  --content-width: 380px;
+}
+
+/* CSS変数を使用した動的幅設定 */
+html, body {
+  width: var(--sidebar-width) !important;
+  max-width: var(--sidebar-width) !important;
+  min-width: var(--sidebar-width) !important;
+}
+
+.container-xl, .container-lg, .container-md, .container {
+  max-width: var(--container-width) !important;
+  width: var(--container-width) !important;
+  min-width: var(--container-width) !important;
+}
+
+.Layout, .Layout-main, .Layout-content {
+  width: var(--sidebar-width) !important;
+  max-width: var(--sidebar-width) !important;
+  min-width: var(--sidebar-width) !important;
+}
+
+[style*="width:"] {
+  max-width: var(--container-width) !important;
+}
+
+.width-full {
+  width: var(--container-width) !important;
+  max-width: var(--container-width) !important;
+}
+
+* {
+  max-width: var(--sidebar-width) !important;
+}
+
+.overflow-auto, .overflow-x-auto {
+  max-width: var(--content-width) !important;
+}
+
+#js-repo-pjax-container,
+.application-main,
+[data-turbo-body] {
+  width: var(--sidebar-width) !important;
+  max-width: var(--sidebar-width) !important;
+}
+
+.pr-toolbar, .pull-request-tab-content {
+  width: var(--container-width) !important;
+  max-width: var(--container-width) !important;
+}
+
+.diff-table {
+  max-width: var(--content-width) !important;
+  width: var(--content-width) !important;
+}
